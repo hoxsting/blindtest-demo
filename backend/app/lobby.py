@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 
 from fastapi import WebSocket
 
-from .models import LobbyState, Player
+from .models import LobbyState, Player, Track
 
 
 @dataclass
@@ -22,6 +22,8 @@ class Lobby:
         self._tokens: dict[str, str] = {}
         self._connections: dict[str, WebSocket] = {}
         self._host_id: str | None = None
+        self._playlist: list[Track] = []
+        self._playlist_url: str | None = None
         self._lock = asyncio.Lock()
 
     @property
@@ -32,7 +34,19 @@ class Lobby:
         return LobbyState(
             players=[record.player for record in self._players.values()],
             host_id=self._host_id,
+            playlist=list(self._playlist),
+            playlist_url=self._playlist_url,
         )
+
+    def is_host_token(self, token: str) -> bool:
+        player = self.player_from_token(token)
+        return player is not None and player.is_host
+
+    async def set_playlist(self, url: str, tracks: list[Track]) -> None:
+        async with self._lock:
+            self._playlist = tracks
+            self._playlist_url = url
+        await self.broadcast({"type": "state", **self.state().model_dump()})
 
     def username_taken(self, username: str) -> bool:
         lowered = username.strip().lower()

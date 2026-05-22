@@ -20,9 +20,26 @@ class JoinResponse(BaseModel):
     is_host: bool
 
 
+class Track(BaseModel):
+    id: str
+    name: str
+    artists: str
+    album: str
+    year: str
+    preview_url: str
+    duration_ms: int
+
+
 class LobbyState(BaseModel):
     players: List[Player]
-    host_id: Optional[str]
+    host_id: Optional[str] = None
+    playlist: List[Track] = []
+    playlist_url: Optional[str] = None
+
+
+class LoadPlaylistRequest(BaseModel):
+    token: str = Field(min_length=1)
+    playlist_url: str = Field(min_length=1)
 
 
 class AnswerRequest(BaseModel):

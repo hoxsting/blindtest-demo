@@ -1,6 +1,8 @@
 import { useState } from "react";
 import type { LobbyState } from "../api";
 import { startSession } from "../api";
+import { PlaylistLoader } from "./PlaylistLoader";
+import { Player } from "./Player";
 
 type Props = {
   state: LobbyState;
@@ -11,6 +13,7 @@ type Props = {
 export function Lobby({ state, connected, me }: Props) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const hasPlaylist = state.playlist.length > 0;
 
   async function handleStart() {
     setBusy(true);
@@ -46,6 +49,22 @@ export function Lobby({ state, connected, me }: Props) {
       {error && <p className="error">{error}</p>}
 
       {me.isHost && (
+        <section className="section">
+          <h2>Playlist Spotify</h2>
+          <PlaylistLoader token={me.token} currentUrl={state.playlist_url} />
+          {hasPlaylist && <Player tracks={state.playlist} />}
+        </section>
+      )}
+
+      {!me.isHost && (
+        <p className="hint">
+          {hasPlaylist
+            ? `Playlist chargée — ${state.playlist.length} piste(s). En attente du démarrage…`
+            : "En attente de l'hôte pour configurer la playlist…"}
+        </p>
+      )}
+
+      {me.isHost && (
         <button
           className="primary"
           onClick={handleStart}
@@ -53,9 +72,6 @@ export function Lobby({ state, connected, me }: Props) {
         >
           {busy ? "Démarrage…" : "Démarrer la partie"}
         </button>
-      )}
-      {!me.isHost && (
-        <p className="hint">En attente de l'hôte pour démarrer la partie…</p>
       )}
     </div>
   );

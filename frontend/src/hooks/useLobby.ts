@@ -15,7 +15,12 @@ const EMPTY_SESSION: SessionState = {
 };
 
 export function useLobby(token: string | null) {
-  const [lobby, setLobby] = useState<LobbyState>({ players: [], host_id: null });
+  const [lobby, setLobby] = useState<LobbyState>({
+    players: [],
+    host_id: null,
+    playlist: [],
+    playlist_url: null,
+  });
   const [session, setSession] = useState<SessionState>(EMPTY_SESSION);
   const [connected, setConnected] = useState(false);
   const wsRef = useRef<WebSocket | null>(null);
@@ -30,7 +35,12 @@ export function useLobby(token: string | null) {
     function applyMessage(msg: any) {
       switch (msg.type) {
         case "state":
-          setLobby({ players: msg.players, host_id: msg.host_id });
+          setLobby({
+            players: msg.players,
+            host_id: msg.host_id,
+            playlist: msg.playlist ?? [],
+            playlist_url: msg.playlist_url ?? null,
+          });
           return;
         case "session_state":
           // Snapshot after reconnect / late join
