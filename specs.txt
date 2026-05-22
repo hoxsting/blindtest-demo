@@ -10,17 +10,20 @@ Pré-traitement :
 - Split la musique en "auteur(s)" / "titre"
 
 Traitement :
-- un bind test d'une musique dure 60 secondes
+-L'application lance une session de blindtest.
+-Une session de blindtest joue 10 chansons prises aléatoirement dans la playlist spotify, 30 secondes par chanson. 
 - Toutes les "configured secondes" / 3 on a des indices (année / première lettre de l'artiste / première lettres du titre)
 - Quand un utilisateur rentre une réponse fausse on affiche une croix à côté de son nom et une animation "shake" de sa "carte"
 - Si la réponse est valide on a des confétis et un tick vert sur sa carte (toujours une animation "shake")
-- Il y a une marge d'erreur de X lettres (dépend de la taille de la réponse) sur le nom de l'artiste / de la musique
-- Quand un utilisateur a bon, le chrono passe à 5 secondes si le chrono était encore supérieur à cela, pas de nouveaux indices
-- Calcule des points à la fin de la manche (définie la toi même)
-- Pendant 10 secondes on affiche le score actuel et on Demande si Continue / Fin de partie - sinon on continue automatiquement si pas de réponse
-- Fin de partie = rappel des scores
+- Il y a une marge d'erreur de X lettres (dépend de la taille de la réponse) sur le nom de l'artiste / de la musique 
+      - 3 caractères ou moins : pas de marge d'erreur. entre 4 et 6 caractères, une erreur tolérée. entre 6 et 10 caractères, 2 erreurs tolérées. Au delà de 10 caractères, 3 erreurs tolérées.  
+- Quand un utilisateur a bien répondu au nom d'artiste et de titre de chanson, le chrono passe à 5 secondes si le chrono était encore supérieur à cela, pas de nouveaux indices.
+- Calcule des points : 1 point par nom d'artiste juste, 1 point par titre de chanson juste, 1 points bonus de rapidité pour la première personne à trouver le bon titre et le bon artiste.
+- Cumul des points tout au long de la sessions, affichage du tableau des scores à la fin avec un podium pour les 3 premiers joueurs durant 10secondes. 
+- A la fin de la session (après l'affichage des scores finaux), on demande si l'utilisateur (celui qui lance la session de blindtest) doit relancer une nouvelle session. Si pas de réponse positive au bout de 10sc, aucune session n'est relancée.
+
 
 Specs :
-- Tout les utilisateurs sont sur le même network
+- Tout les joueurs sont sur le même network, chaque joueur peut rejoindre la session et accède à une interface pour répondre en direct via un QR code. (un QR code menant à la session est généré et scanable par les joueurs)
 - Le créateur du salon host le serveur
-- Le créateur du salon peut crée la partie et est le seul à avoir la main ur les boutons "continuer / stoper" la partie
+- Le créateur du salon peut crée la partie et est le seul à avoir la main sur le bouton de choix en fin de session. 
