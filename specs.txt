@@ -1,0 +1,26 @@
+Projet :
+- Blind Test
+
+Input :
+- URL Playslist Spotify
+- Salon pour rejoindre la partie en cours. Entrée nom d'utilisateur
+- Bouton démarre la partie
+
+Pré-traitement :
+- Split la musique en "auteur(s)" / "titre"
+
+Traitement :
+- un bind test d'une musique dure 60 secondes
+- Toutes les "configured secondes" / 3 on a des indices (année / première lettre de l'artiste / première lettres du titre)
+- Quand un utilisateur rentre une réponse fausse on affiche une croix à côté de son nom et une animation "shake" de sa "carte"
+- Si la réponse est valide on a des confétis et un tick vert sur sa carte (toujours une animation "shake")
+- Il y a une marge d'erreur de X lettres (dépend de la taille de la réponse) sur le nom de l'artiste / de la musique
+- Quand un utilisateur a bon, le chrono passe à 5 secondes si le chrono était encore supérieur à cela, pas de nouveaux indices
+- Calcule des points à la fin de la manche (définie la toi même)
+- Pendant 10 secondes on affiche le score actuel et on Demande si Continue / Fin de partie - sinon on continue automatiquement si pas de réponse
+- Fin de partie = rappel des scores
+
+Specs :
+- Tout les utilisateurs sont sur le même network
+- Le créateur du salon host le serveur
+- Le créateur du salon peut crée la partie et est le seul à avoir la main ur les boutons "continuer / stoper" la partie
