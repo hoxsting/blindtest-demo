@@ -11,7 +11,7 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from . import session as session_module
-from .catalog import MockCatalog, SongCatalog
+from .catalog import SongCatalog, catalog_from_tracks
 from .lobby import lobby
 from .models import (
     AnswerRequest,
@@ -28,13 +28,18 @@ HOST_TOKEN = secrets.token_urlsafe(8)
 STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
 
 
-def _build_catalog() -> SongCatalog:
-    """Seam for swapping in the Spotify catalog (handled by another dev)."""
-    return MockCatalog.demo()
+def _build_catalog() -> SongCatalog | None:
+    """Resolve the catalog from the playlist currently loaded in the lobby.
+
+    Called every time the host hits /api/session/start, so reloading a
+    playlist between sessions Just Works. Returns None when no playlist is
+    loaded — session.start() then returns False and we reply 409.
+    """
+    return catalog_from_tracks(lobby.state().playlist)
 
 
 app = FastAPI(title="Blind Test")
-session = session_module.init(catalog=_build_catalog(), lobby=lobby)
+session = session_module.init(catalog_factory=_build_catalog, lobby=lobby)
 
 
 def _authenticate(token: str | None) -> Player:
@@ -149,6 +154,11 @@ async def session_start(
     x_player_token: Optional[str] = Header(default=None),
 ) -> CommandResponse:
     _require_host(x_player_token)
+    if session.phase == session_module.GameSession.PHASE_IDLE and not lobby.state().playlist:
+        raise HTTPException(
+            status_code=409,
+            detail="Charge d'abord une playlist YouTube avant de démarrer.",
+        )
     started = await session.start()
     if not started:
         raise HTTPException(status_code=409, detail="session déjà en cours")

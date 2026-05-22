@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { LobbyState, SessionState } from "../api";
 import { restartSession, submitAnswer } from "../api";
+import { SessionPlayer } from "./SessionPlayer";
 
 type Props = {
   lobby: LobbyState;
@@ -57,6 +58,7 @@ export function Session({ lobby, session, me }: Props) {
       ) : (
         <>
           <SessionHeader session={session} isReveal={isReveal} />
+          {me.isHost && <SessionPlayer videoId={session.currentVideoId} />}
           <HintRow session={session} />
           <PlayerGrid
             lobby={lobby}

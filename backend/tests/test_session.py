@@ -62,8 +62,9 @@ def make_session(
     between_rounds_seconds: float = 0.0,
     restart_prompt_seconds: float = 0.2,
 ) -> GameSession:
+    catalog = MockCatalog(list(_SONGS), rng=random.Random(0))
     return GameSession(
-        catalog=MockCatalog(list(_SONGS), rng=random.Random(0)),
+        catalog_factory=lambda: catalog,
         broadcast=broadcaster,
         get_player_ids=lambda: list(player_ids or ["alice", "bob"]),
         rounds=rounds,

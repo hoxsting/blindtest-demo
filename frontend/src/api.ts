@@ -42,6 +42,7 @@ export type SessionState = {
   reveal: Song | null;
   podium: PodiumEntry[] | null;
   restartDeadlineMs: number | null;
+  currentVideoId: string | null;
   lastFeedback:
     | {
         playerId: string;

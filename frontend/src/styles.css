@@ -515,12 +515,27 @@ button.primary {
   margin: 0.5rem 0 0;
 }
 
-.yt-hidden {
-  position: absolute;
-  top: -9999px;
-  left: -9999px;
-  width: 200px;
-  height: 200px;
-  pointer-events: none;
-  opacity: 0;
+.yt-frame {
+  display: flex;
+  justify-content: center;
+  margin: 1rem auto;
+}
+
+.yt-frame > div {
+  width: 320px;
+  height: 180px;
+  background: #000;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+/* Pour cacher l'iframe pendant le blindtest (sans casser la lecture YT) :
+   appliquer cette classe au lieu de .yt-frame. NE PAS utiliser opacity: 0 ni
+   display: none, sinon YouTube refuse de jouer. */
+.yt-offscreen {
+  position: fixed;
+  top: 0;
+  left: -10000px;
+  width: 320px;
+  height: 180px;
 }

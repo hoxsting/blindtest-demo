@@ -11,6 +11,7 @@ const EMPTY_SESSION: SessionState = {
   reveal: null,
   podium: null,
   restartDeadlineMs: null,
+  currentVideoId: null,
   lastFeedback: null,
 };
 
@@ -33,6 +34,7 @@ export function useLobby(token: string | null) {
     let retry: number | undefined;
 
     function applyMessage(msg: any) {
+      console.log("[useLobby] msg", msg.type, msg);
       switch (msg.type) {
         case "state":
           setLobby({
@@ -61,6 +63,7 @@ export function useLobby(token: string | null) {
             timeLeftMs: msg.time_left_ms,
             hints: [],
             reveal: null,
+            currentVideoId: msg.video_id ?? null,
           }));
           return;
         case "hint":
@@ -91,6 +94,7 @@ export function useLobby(token: string | null) {
             reveal: msg.song,
             scores: msg.scores_total ?? s.scores,
             timeLeftMs: 0,
+            currentVideoId: null,
           }));
           return;
         case "session_ended":
@@ -99,6 +103,7 @@ export function useLobby(token: string | null) {
             phase: "final",
             podium: msg.podium,
             scores: msg.scores_total ?? s.scores,
+            currentVideoId: null,
           }));
           return;
         case "restart_prompt":

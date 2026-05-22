@@ -21,6 +21,7 @@ from .matching import classify_guess
 
 Broadcast = Callable[[Dict], Awaitable[None]]
 GetPlayerIds = Callable[[], List[str]]
+CatalogFactory = Callable[[], "SongCatalog | None"]
 
 
 @dataclass
@@ -41,7 +42,7 @@ class GameSession:
 
     def __init__(
         self,
-        catalog: SongCatalog,
+        catalog_factory: CatalogFactory,
         broadcast: Broadcast,
         get_player_ids: GetPlayerIds,
         rounds: int = 10,
@@ -51,7 +52,9 @@ class GameSession:
         between_rounds_seconds: float = 2.0,
         restart_prompt_seconds: float = 10.0,
     ) -> None:
-        self._catalog = catalog
+        # Resolved at start() time so it picks up whatever playlist the host
+        # has loaded most recently.
+        self._catalog_factory = catalog_factory
         self._broadcast = broadcast
         self._get_player_ids = get_player_ids
         self._rounds = rounds
@@ -94,7 +97,10 @@ class GameSession:
         async with self._lock:
             if self._phase != self.PHASE_IDLE:
                 return False
-            songs = self._catalog.random_sample(self._rounds)
+            catalog = self._catalog_factory()
+            if catalog is None:
+                return False
+            songs = catalog.random_sample(self._rounds)
             if not songs:
                 return False
             self._songs = songs
@@ -257,6 +263,7 @@ class GameSession:
                 "round_index": index,
                 "total_rounds": self._rounds,
                 "time_left_ms": int(self._round_seconds * 1000),
+                "video_id": song.video_id,
             }
         )
 
@@ -372,11 +379,11 @@ def _first_char(s: str) -> str:
 session: "GameSession | None" = None
 
 
-def init(catalog: SongCatalog, lobby) -> "GameSession":
+def init(catalog_factory: CatalogFactory, lobby) -> "GameSession":
     """Instantiate and return the module-level session singleton."""
     global session
     session = GameSession(
-        catalog=catalog,
+        catalog_factory=catalog_factory,
         broadcast=lobby.broadcast,
         get_player_ids=lambda: [p.id for p in lobby.state().players],
     )

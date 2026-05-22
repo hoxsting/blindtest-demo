@@ -1,40 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { Track } from "../api";
-
-declare global {
-  interface Window {
-    YT?: { Player: new (el: Element, opts: unknown) => YTPlayer };
-    onYouTubeIframeAPIReady?: () => void;
-  }
-}
-
-type YTPlayer = {
-  destroy?: () => void;
-  loadVideoById: (id: string) => void;
-  cueVideoById: (id: string) => void;
-  playVideo: () => void;
-  pauseVideo: () => void;
-};
-
-let apiPromise: Promise<NonNullable<Window["YT"]>> | null = null;
-function loadYouTubeAPI(): Promise<NonNullable<Window["YT"]>> {
-  if (apiPromise) return apiPromise;
-  apiPromise = new Promise((resolve) => {
-    if (window.YT?.Player) {
-      resolve(window.YT);
-      return;
-    }
-    const previous = window.onYouTubeIframeAPIReady;
-    window.onYouTubeIframeAPIReady = () => {
-      previous?.();
-      if (window.YT) resolve(window.YT);
-    };
-    const tag = document.createElement("script");
-    tag.src = "https://www.youtube.com/iframe_api";
-    document.head.appendChild(tag);
-  });
-  return apiPromise;
-}
+import { FATAL_YT_ERRORS, loadYouTubeAPI, type YTPlayer } from "../lib/youtubeApi";
 
 type Props = {
   tracks: Track[];
@@ -43,34 +9,54 @@ type Props = {
 export function Player({ tracks }: Props) {
   const [index, setIndex] = useState(0);
   const [playing, setPlaying] = useState(false);
+  const [skipped, setSkipped] = useState<Set<number>>(new Set());
   const containerRef = useRef<HTMLDivElement>(null);
   const playerRef = useRef<YTPlayer | null>(null);
   const tracksRef = useRef(tracks);
   const indexRef = useRef(index);
+  const skippedRef = useRef(skipped);
 
   const current = tracks[index];
+
+  function findNextPlayable(from: number, blocked: Set<number>): number | null {
+    if (!tracks.length) return null;
+    for (let step = 1; step <= tracks.length; step++) {
+      const candidate = (from + step) % tracks.length;
+      if (!blocked.has(candidate)) return candidate;
+    }
+    return null;
+  }
 
   useEffect(() => {
     tracksRef.current = tracks;
     indexRef.current = index;
-  }, [tracks, index]);
+    skippedRef.current = skipped;
+  }, [tracks, index, skipped]);
 
   useEffect(() => {
     setIndex(0);
     setPlaying(false);
+    setSkipped(new Set());
   }, [tracks]);
 
   useEffect(() => {
     let cancelled = false;
     loadYouTubeAPI().then((YT) => {
-      if (cancelled || !containerRef.current) return;
+      if (cancelled || !containerRef.current) {
+        console.log("[Player] cancelled before YT.Player created");
+        return;
+      }
+      console.log(
+        "[Player] creating YT.Player with videoId=",
+        tracksRef.current[0]?.video_id,
+      );
       playerRef.current = new YT.Player(containerRef.current, {
-        height: "200",
-        width: "200",
+        height: "180",
+        width: "320",
         videoId: tracksRef.current[0]?.video_id ?? "",
         playerVars: {
           autoplay: 0,
-          controls: 0,
+          controls: 1,
           disablekb: 1,
           fs: 0,
           modestbranding: 1,
@@ -78,7 +64,41 @@ export function Player({ tracks }: Props) {
           iv_load_policy: 3,
         },
         events: {
+          onReady: () => console.log("[Player] YT.Player ready"),
+          onError: (e: { data: number }) => {
+            console.warn("[Player] YT error code", e.data);
+            if (!FATAL_YT_ERRORS.has(e.data)) return;
+            const blockedIdx = indexRef.current;
+            const list = tracksRef.current;
+            const blocked = new Set(skippedRef.current);
+            blocked.add(blockedIdx);
+            skippedRef.current = blocked;
+            setSkipped(blocked);
+            const next = findNextPlayable(blockedIdx, blocked);
+            if (next === null || blocked.size >= list.length) {
+              console.warn(
+                "[Player] no playable video left — all tracks blocked embedding",
+              );
+              setPlaying(false);
+              return;
+            }
+            console.log(
+              `[Player] auto-skip (err ${e.data}) → next index`,
+              next,
+            );
+            setIndex(next);
+            setPlaying(true);
+          },
           onStateChange: (e: { data: number }) => {
+            const states: Record<number, string> = {
+              [-1]: "unstarted",
+              0: "ended",
+              1: "playing",
+              2: "paused",
+              3: "buffering",
+              5: "cued",
+            };
+            console.log("[Player] state →", states[e.data] ?? e.data);
             if (e.data === 1) setPlaying(true);
             else if (e.data === 2) setPlaying(false);
             else if (e.data === 0) {
@@ -136,7 +156,7 @@ export function Player({ tracks }: Props) {
         <div className="player-meta">{current.year || ""}</div>
       </div>
 
-      <div className="yt-hidden" aria-hidden="true">
+      <div className="yt-frame" aria-hidden="true">
         <div ref={containerRef} />
       </div>
 
@@ -159,6 +179,7 @@ export function Player({ tracks }: Props) {
 
       <p className="player-counter">
         {index + 1} / {tracks.length}
+        {skipped.size > 0 && ` · ${skipped.size} ignorée(s) (embedding bloqué)`}
       </p>
     </div>
   );

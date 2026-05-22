@@ -16,10 +16,42 @@ class Song:
     artist: str
     title: str
     year: int | None = None
+    video_id: str | None = None
 
 
 class SongCatalog(Protocol):
     def random_sample(self, k: int) -> list[Song]: ...
+
+
+def catalog_from_tracks(tracks) -> "MockCatalog | None":
+    """Build a SongCatalog from a list of `Track` (the lobby-loaded playlist).
+
+    Returns None if the playlist has no usable tracks (no video_id or no
+    artist/title at all). Reuses MockCatalog's uniform-sampling logic.
+    """
+    songs: list[Song] = []
+    for t in tracks:
+        if not t.video_id:
+            continue
+        # Tracks parsed from YouTube can have empty artist when the title
+        # didn't contain a separator. We still keep them — the matcher will
+        # just always fail on the artist for those, but the title is still
+        # winnable.
+        try:
+            year_int = int(t.year) if t.year else None
+        except (TypeError, ValueError):
+            year_int = None
+        songs.append(
+            Song(
+                artist=t.artists or "",
+                title=t.name or "",
+                year=year_int,
+                video_id=t.video_id,
+            )
+        )
+    if not songs:
+        return None
+    return MockCatalog(songs)
 
 
 class MockCatalog:
