@@ -1,19 +1,47 @@
+from __future__ import annotations
+
 import secrets
 import socket
 import subprocess
 from pathlib import Path
+from typing import Optional
 
-from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, Header, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
+from . import session as session_module
+from .catalog import MockCatalog, SongCatalog
 from .lobby import lobby
-from .models import JoinRequest, JoinResponse
+from .models import AnswerRequest, CommandResponse, JoinRequest, JoinResponse, Player
 
 HOST_TOKEN = secrets.token_urlsafe(8)
 STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
 
+
+def _build_catalog() -> SongCatalog:
+    """Seam for swapping in the Spotify catalog (handled by another dev)."""
+    return MockCatalog.demo()
+
+
 app = FastAPI(title="Blind Test")
+session = session_module.init(catalog=_build_catalog(), lobby=lobby)
+
+
+def _authenticate(token: str | None) -> Player:
+    if not token:
+        raise HTTPException(status_code=401, detail="missing token")
+    player = lobby.player_from_token(token)
+    if player is None:
+        raise HTTPException(status_code=401, detail="invalid token")
+    return player
+
+
+def _require_host(token: str | None) -> Player:
+    player = _authenticate(token)
+    if not player.is_host:
+        raise HTTPException(status_code=403, detail="host only")
+    return player
 
 
 def _all_local_ips() -> list[tuple[str, str]]:
@@ -89,6 +117,39 @@ async def get_lobby() -> JSONResponse:
     return JSONResponse(lobby.state().model_dump())
 
 
+@app.post("/api/session/start", response_model=CommandResponse)
+async def session_start(
+    x_player_token: Optional[str] = Header(default=None),
+) -> CommandResponse:
+    _require_host(x_player_token)
+    started = await session.start()
+    if not started:
+        raise HTTPException(status_code=409, detail="session déjà en cours")
+    return CommandResponse(ok=True)
+
+
+@app.post("/api/session/answer", response_model=CommandResponse)
+async def session_answer(
+    req: AnswerRequest,
+    x_player_token: Optional[str] = Header(default=None),
+) -> CommandResponse:
+    player = _authenticate(x_player_token)
+    await session.submit_answer(player.id, req.guess)
+    return CommandResponse(ok=True)
+
+
+@app.post("/api/session/restart", response_model=CommandResponse)
+async def session_restart(
+    x_player_token: Optional[str] = Header(default=None),
+) -> CommandResponse:
+    _require_host(x_player_token)
+    if not await session.request_restart():
+        raise HTTPException(
+            status_code=409, detail="aucune session en attente de redémarrage"
+        )
+    return CommandResponse(ok=True)
+
+
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket, token: str) -> None:
     player = await lobby.register_connection(token, websocket)
@@ -97,6 +158,8 @@ async def websocket_endpoint(websocket: WebSocket, token: str) -> None:
         return
     await websocket.accept()
     await websocket.send_json({"type": "state", **lobby.state().model_dump()})
+    if session.phase != session_module.GameSession.PHASE_IDLE:
+        await websocket.send_json({"type": "session_state", **session.state()})
     try:
         while True:
             await websocket.receive_text()
