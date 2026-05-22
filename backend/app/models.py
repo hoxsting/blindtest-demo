@@ -1,3 +1,5 @@
+from typing import List, Optional
+
 from pydantic import BaseModel, Field
 
 
@@ -9,7 +11,7 @@ class Player(BaseModel):
 
 class JoinRequest(BaseModel):
     username: str = Field(min_length=1, max_length=24)
-    host_token: str | None = None
+    host_token: Optional[str] = None
 
 
 class JoinResponse(BaseModel):
@@ -28,12 +30,20 @@ class Track(BaseModel):
 
 
 class LobbyState(BaseModel):
-    players: list[Player]
-    host_id: str | None
-    playlist: list[Track] = []
-    playlist_url: str | None = None
+    players: List[Player]
+    host_id: Optional[str] = None
+    playlist: List[Track] = []
+    playlist_url: Optional[str] = None
 
 
 class LoadPlaylistRequest(BaseModel):
     token: str = Field(min_length=1)
     playlist_url: str = Field(min_length=1)
+
+
+class AnswerRequest(BaseModel):
+    guess: str = Field(min_length=1, max_length=120)
+
+
+class CommandResponse(BaseModel):
+    ok: bool

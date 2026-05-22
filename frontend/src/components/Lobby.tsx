@@ -1,4 +1,6 @@
+import { useState } from "react";
 import type { LobbyState } from "../api";
+import { startSession } from "../api";
 import { PlaylistLoader } from "./PlaylistLoader";
 import { Player } from "./Player";
 
@@ -9,7 +11,21 @@ type Props = {
 };
 
 export function Lobby({ state, connected, me }: Props) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const hasPlaylist = state.playlist.length > 0;
+
+  async function handleStart() {
+    setBusy(true);
+    setError(null);
+    try {
+      await startSession(me.token);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Erreur");
+    } finally {
+      setBusy(false);
+    }
+  }
 
   return (
     <div className="screen">
@@ -30,6 +46,8 @@ export function Lobby({ state, connected, me }: Props) {
         ))}
       </div>
 
+      {error && <p className="error">{error}</p>}
+
       {me.isHost && (
         <section className="section">
           <h2>Playlist Spotify</h2>
@@ -49,10 +67,10 @@ export function Lobby({ state, connected, me }: Props) {
       {me.isHost && (
         <button
           className="primary"
-          disabled
-          title="Disponible à la prochaine itération"
+          onClick={handleStart}
+          disabled={busy || state.players.length === 0}
         >
-          Démarrer la partie
+          {busy ? "Démarrage…" : "Démarrer la partie"}
         </button>
       )}
     </div>
