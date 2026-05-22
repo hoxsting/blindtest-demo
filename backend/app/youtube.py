@@ -8,6 +8,9 @@ we heuristically split "Artist - Title" out of the YouTube video title.
 from __future__ import annotations
 
 import re
+import urllib.error
+import urllib.request
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
 import yt_dlp
@@ -15,6 +18,45 @@ import yt_dlp
 
 class YouTubeError(Exception):
     """Raised when something goes wrong talking to YouTube."""
+
+
+def _check_embeddable(video_id: str, timeout: float = 3.0) -> bool:
+    """Return True iff YouTube's oEmbed endpoint accepts this video.
+
+    oEmbed returns 200 only for videos that are *both* available AND allow
+    embedding. 401 = embedding disabled by uploader (error 150 in the IFrame
+    player). 404 = removed/private/region-restricted-from-our-IP.
+
+    On a network failure we conservatively return True so a flaky oEmbed
+    doesn't wipe out the whole playlist.
+    """
+    url = (
+        "https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v="
+        f"{video_id}&format=json"
+    )
+    try:
+        with urllib.request.urlopen(url, timeout=timeout) as resp:
+            return resp.status == 200
+    except urllib.error.HTTPError:
+        return False
+    except Exception:
+        return True
+
+
+def _filter_embeddable(
+    tracks: list[dict[str, Any]], max_workers: int = 20
+) -> tuple[list[dict[str, Any]], int]:
+    """Drop tracks whose YouTube video refuses embedding.
+
+    Returns (kept_tracks, dropped_count). Probes in parallel via a thread
+    pool — for a 79-track playlist this completes in roughly 2-5 seconds.
+    """
+    if not tracks:
+        return [], 0
+    with ThreadPoolExecutor(max_workers=max_workers) as ex:
+        flags = list(ex.map(lambda t: _check_embeddable(t["video_id"]), tracks))
+    kept = [t for t, ok in zip(tracks, flags) if ok]
+    return kept, len(tracks) - len(kept)
 
 
 # Cosmetic suffixes commonly added to YouTube video titles. Stripped before
@@ -85,11 +127,21 @@ def _looks_like_youtube_playlist(url: str) -> bool:
     return "youtube.com" in url or "youtu.be" in url or url.startswith("PL") or url.startswith("OL")
 
 
-def fetch_playlist_tracks(url_or_id: str) -> list[dict[str, Any]]:
-    """Return a list of {id, name, artists, year, video_id, duration_ms}.
+def fetch_playlist_tracks(
+    url_or_id: str, filter_embeddable: bool = True
+) -> tuple[list[dict[str, Any]], int]:
+    """Return (tracks, dropped_count).
+
+    `tracks` is the playable list of {id, name, artists, year, video_id,
+    duration_ms} — after dropping deleted/private/unavailable entries and,
+    if `filter_embeddable` is True, videos that YouTube refuses to embed.
+    `dropped_count` reports how many were dropped by the embeddability check
+    only (so the caller can surface "X filtrées" to the user).
 
     Uses `extract_flat="in_playlist"` so we do ONE network call per playlist
-    instead of one per video — critical for playlists >50 tracks.
+    instead of one per video — critical for playlists >50 tracks. The
+    embeddability check then adds one short HTTP probe per surviving video,
+    parallelized via a thread pool.
     """
     url = url_or_id.strip()
     if not url:
@@ -145,4 +197,8 @@ def fetch_playlist_tracks(url_or_id: str) -> list[dict[str, Any]]:
             }
         )
 
-    return tracks
+    if not filter_embeddable:
+        return tracks, 0
+
+    playable, dropped = _filter_embeddable(tracks)
+    return playable, dropped

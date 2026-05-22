@@ -12,6 +12,7 @@ const EMPTY_SESSION: SessionState = {
   podium: null,
   restartDeadlineMs: null,
   currentVideoId: null,
+  roundStartedAt: 0,
   lastFeedback: null,
 };
 
@@ -64,6 +65,7 @@ export function useLobby(token: string | null) {
             hints: [],
             reveal: null,
             currentVideoId: msg.video_id ?? null,
+            roundStartedAt: Date.now(),
           }));
           return;
         case "hint":

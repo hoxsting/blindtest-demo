@@ -33,6 +33,10 @@ class _Round:
     found_artist: set[str] = field(default_factory=set)
     found_title: set[str] = field(default_factory=set)
     first_full: str | None = None
+    # When True, _play_round returns "replay this round with a fresh song"
+    # instead of broadcasting round_ended. Used when the host's player can't
+    # actually play the song (region-locked, embed-disabled, etc.).
+    rerun: bool = False
 
 
 class GameSession:
@@ -164,6 +168,51 @@ class GameSession:
             }
         )
 
+    async def skip_round(self, reason: str = "manual") -> bool:
+        """Skip the current round.
+
+        - reason="manual": end the round immediately. round_ended is
+          broadcast (with the song reveal) and the next round starts.
+        - reason="rights": the player's iframe can't actually play this
+          song. Pick a replacement from the catalog, swap it into the
+          current round, and re-play the round from scratch (same
+          round_index, fresh chrono, no reveal of the unplayed song).
+          Falls back to manual behaviour if no fresh song is available.
+        """
+        async with self._lock:
+            if (
+                self._phase != self.PHASE_PLAYING
+                or self._round is None
+                or self._completion is None
+            ):
+                return False
+            if reason == "rights":
+                replacement = self._pick_replacement_song()
+                if replacement is not None:
+                    self._songs[self._round.index] = replacement
+                    self._round.rerun = True
+            self._completion.set()
+        return True
+
+    def _pick_replacement_song(self) -> "Song | None":
+        """Sample a song from the catalog that isn't already scheduled.
+
+        Caller must hold self._lock. Returns None if no fresh candidate is
+        found within a few attempts — the caller then falls back to ending
+        the round normally so the session doesn't stall.
+        """
+        catalog = self._catalog_factory()
+        if catalog is None:
+            return None
+        used = {
+            (s.artist, s.title, s.video_id) for s in self._songs
+        }
+        candidates = catalog.random_sample(max(20, len(self._songs) * 2))
+        for c in candidates:
+            if (c.artist, c.title, c.video_id) not in used:
+                return c
+        return None
+
     async def request_restart(self) -> bool:
         """Host-triggered. Only valid during PHASE_FINAL — wakes the loop."""
         async with self._lock:
@@ -229,8 +278,13 @@ class GameSession:
 
     async def _run(self) -> None:
         try:
-            for i, song in enumerate(self._songs):
-                await self._play_round(i, song)
+            i = 0
+            while i < len(self._songs):
+                rerun = await self._play_round(i, self._songs[i])
+                if not rerun:
+                    i += 1
+                # On rerun, self._songs[i] has been swapped to a fresh song
+                # by skip_round("rights"); we replay the same round index.
             await self._enter_final()
         except asyncio.CancelledError:
             raise
@@ -239,7 +293,10 @@ class GameSession:
             # If we were cancelled, cancel() does the reset.
             pass
 
-    async def _play_round(self, index: int, song: Song) -> None:
+    async def _play_round(self, index: int, song: Song) -> bool:
+        """Play one round. Returns True if the round should be replayed
+        with a freshly-swapped-in song (the host's player couldn't play
+        this one), False if it ended normally."""
         now = time.monotonic()
         round_ = _Round(
             index=index,
@@ -271,9 +328,15 @@ class GameSession:
             await completion.wait()
         finally:
             await self._cancel_tasks(round_.finish_timer, *hint_tasks)
+            rerun = round_.rerun
             async with self._lock:
                 self._round = None
                 self._completion = None
+
+        if rerun:
+            # Don't reveal a song nobody got to hear; the next iteration of
+            # _run will re-call _play_round with the replacement song.
+            return True
 
         await self._broadcast(
             {
@@ -289,8 +352,9 @@ class GameSession:
         )
 
         # Brief gap before next round so the UI can show the reveal
-        if index < self._rounds - 1:
+        if index < len(self._songs) - 1:
             await asyncio.sleep(self._between_rounds)
+        return False
 
     def _schedule_hints(self, song: Song, round_index: int) -> list[asyncio.Task]:
         tasks: list[asyncio.Task] = []

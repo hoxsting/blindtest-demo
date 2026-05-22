@@ -515,6 +515,25 @@ button.primary {
   margin: 0.5rem 0 0;
 }
 
+.host-skip {
+  display: flex;
+  justify-content: center;
+  margin: 0.5rem 0 0.75rem;
+}
+
+.host-skip button {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 0.85rem;
+  padding: 0.4rem 1rem;
+}
+
+.host-skip button:hover:not(:disabled) {
+  background: var(--bg-card);
+  color: var(--fg);
+}
+
 .yt-frame {
   display: flex;
   justify-content: center;

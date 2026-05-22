@@ -136,17 +136,20 @@ async def load_playlist(req: LoadPlaylistRequest) -> JSONResponse:
     if not lobby.is_host_token(req.token):
         raise HTTPException(status_code=403, detail="Seul l'hôte peut charger une playlist")
     try:
-        raw_tracks = fetch_playlist_tracks(req.playlist_url)
+        raw_tracks, filtered = fetch_playlist_tracks(req.playlist_url)
     except YouTubeError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     tracks = [Track(**t) for t in raw_tracks]
     if not tracks:
         raise HTTPException(
             status_code=400,
-            detail="Aucune piste jouable trouvée dans cette playlist YouTube",
+            detail=(
+                "Aucune vidéo embeddable dans cette playlist — toutes ont été "
+                "filtrées (embedding désactivé, vidéos supprimées ou privées)."
+            ),
         )
     await lobby.set_playlist(req.playlist_url, tracks)
-    return JSONResponse({"loaded": len(tracks)})
+    return JSONResponse({"loaded": len(tracks), "filtered": filtered})
 
 
 @app.post("/api/session/start", response_model=CommandResponse)
@@ -172,6 +175,27 @@ async def session_answer(
 ) -> CommandResponse:
     player = _authenticate(x_player_token)
     await session.submit_answer(player.id, req.guess)
+    return CommandResponse(ok=True)
+
+
+@app.post("/api/session/skip", response_model=CommandResponse)
+async def session_skip(
+    reason: str = "manual",
+    x_player_token: Optional[str] = Header(default=None),
+) -> CommandResponse:
+    """Skip the current round.
+
+    `reason=manual` (default) → end this round, reveal the song, move to
+    the next round.
+    `reason=rights` → the iframe couldn't play this video; swap in a fresh
+    song from the catalog and replay this round (round counter does NOT
+    advance, no reveal).
+    """
+    _require_host(x_player_token)
+    if reason not in ("manual", "rights"):
+        raise HTTPException(status_code=400, detail="invalid reason")
+    if not await session.skip_round(reason=reason):
+        raise HTTPException(status_code=409, detail="aucun round en cours")
     return CommandResponse(ok=True)
 
 

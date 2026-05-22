@@ -20,7 +20,11 @@ export function PlaylistLoader({ token, currentUrl }: Props) {
     setInfo(null);
     try {
       const res = await loadPlaylist(token, url.trim());
-      setInfo(`${res.loaded} piste(s) chargée(s)`);
+      const filteredNote =
+        res.filtered > 0
+          ? ` · ${res.filtered} filtrée(s) (embedding bloqué)`
+          : "";
+      setInfo(`${res.loaded} piste(s) jouable(s)${filteredNote}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Erreur inconnue");
     } finally {
@@ -42,7 +46,11 @@ export function PlaylistLoader({ token, currentUrl }: Props) {
       {error && <p className="error">{error}</p>}
       {info && <p className="info">{info}</p>}
       <button type="submit" disabled={loading || !url.trim()}>
-        {loading ? "Chargement…" : currentUrl ? "Recharger" : "Charger"}
+        {loading
+          ? "Chargement… (vérification des vidéos)"
+          : currentUrl
+            ? "Recharger"
+            : "Charger"}
       </button>
     </form>
   );

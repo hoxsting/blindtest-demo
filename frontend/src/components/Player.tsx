@@ -1,6 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import type { Track } from "../api";
-import { FATAL_YT_ERRORS, loadYouTubeAPI, type YTPlayer } from "../lib/youtubeApi";
+import {
+  FATAL_YT_ERRORS,
+  YT_ERROR_DESCRIPTIONS,
+  YT_STATE_NAMES,
+  loadYouTubeAPI,
+  type YTPlayer,
+} from "../lib/youtubeApi";
 
 type Props = {
   tracks: Track[];
@@ -66,7 +72,11 @@ export function Player({ tracks }: Props) {
         events: {
           onReady: () => console.log("[Player] YT.Player ready"),
           onError: (e: { data: number }) => {
-            console.warn("[Player] YT error code", e.data);
+            const desc = YT_ERROR_DESCRIPTIONS[e.data] ?? "unknown error";
+            const t = tracksRef.current[indexRef.current];
+            console.warn(
+              `[Player] YT error ${e.data}: ${desc} (video=${t?.video_id ?? "?"}, ${t?.artists ?? "?"} — ${t?.name ?? "?"})`,
+            );
             if (!FATAL_YT_ERRORS.has(e.data)) return;
             const blockedIdx = indexRef.current;
             const list = tracksRef.current;
@@ -90,15 +100,7 @@ export function Player({ tracks }: Props) {
             setPlaying(true);
           },
           onStateChange: (e: { data: number }) => {
-            const states: Record<number, string> = {
-              [-1]: "unstarted",
-              0: "ended",
-              1: "playing",
-              2: "paused",
-              3: "buffering",
-              5: "cued",
-            };
-            console.log("[Player] state →", states[e.data] ?? e.data);
+            console.log("[Player] state →", YT_STATE_NAMES[e.data] ?? e.data);
             if (e.data === 1) setPlaying(true);
             else if (e.data === 2) setPlaying(false);
             else if (e.data === 0) {

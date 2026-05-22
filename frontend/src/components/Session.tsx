@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import type { LobbyState, SessionState } from "../api";
-import { restartSession, submitAnswer } from "../api";
+import { restartSession, skipRound, submitAnswer } from "../api";
 import { SessionPlayer } from "./SessionPlayer";
 
 type Props = {
@@ -29,11 +29,13 @@ function useFeedbackByPlayer(session: SessionState) {
   return byPlayer;
 }
 
-function useCountdown(targetMs: number, running: boolean) {
+function useCountdown(targetMs: number, running: boolean, resetKey: number) {
+  // `resetKey` forces the chrono to restart even when targetMs is unchanged,
+  // e.g. when a rights-skip replays the same round_index from scratch.
   const [remaining, setRemaining] = useState(targetMs);
   useEffect(() => {
     setRemaining(targetMs);
-  }, [targetMs]);
+  }, [targetMs, resetKey]);
   useEffect(() => {
     if (!running) return;
     const start = Date.now();
@@ -42,7 +44,7 @@ function useCountdown(targetMs: number, running: boolean) {
       setRemaining(Math.max(0, initial - (Date.now() - start)));
     }, 100);
     return () => window.clearInterval(id);
-  }, [targetMs, running]);
+  }, [targetMs, running, resetKey]);
   return remaining;
 }
 
@@ -58,7 +60,13 @@ export function Session({ lobby, session, me }: Props) {
       ) : (
         <>
           <SessionHeader session={session} isReveal={isReveal} />
-          {me.isHost && <SessionPlayer videoId={session.currentVideoId} />}
+          {me.isHost && (
+            <SessionPlayer
+              videoId={session.currentVideoId}
+              hostToken={me.token}
+            />
+          )}
+          {me.isHost && !isReveal && <HostSkipButton token={me.token} />}
           <HintRow session={session} />
           <PlayerGrid
             lobby={lobby}
@@ -85,7 +93,11 @@ function SessionHeader({
   isReveal: boolean;
 }) {
   const running = !isReveal && session.timeLeftMs > 0;
-  const remaining = useCountdown(session.timeLeftMs, running);
+  const remaining = useCountdown(
+    session.timeLeftMs,
+    running,
+    session.roundStartedAt,
+  );
   const seconds = Math.ceil(remaining / 1000);
 
   return (
@@ -201,6 +213,28 @@ function AnswerInput({ token, disabled }: { token: string; disabled: boolean }) 
       </button>
       {error && <p className="error">{error}</p>}
     </form>
+  );
+}
+
+function HostSkipButton({ token }: { token: string }) {
+  const [busy, setBusy] = useState(false);
+  async function handleSkip() {
+    if (busy) return;
+    setBusy(true);
+    try {
+      await skipRound(token);
+    } catch {
+      // Round already ended between click and request — ignore silently.
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <div className="host-skip">
+      <button type="button" onClick={handleSkip} disabled={busy}>
+        {busy ? "Passage…" : "⏭ Passer ce son"}
+      </button>
+    </div>
   );
 }
 

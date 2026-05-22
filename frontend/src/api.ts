@@ -43,6 +43,9 @@ export type SessionState = {
   podium: PodiumEntry[] | null;
   restartDeadlineMs: number | null;
   currentVideoId: string | null;
+  // Bumped on every round_started so the chrono resets even when the
+  // round_index stays the same (rights-skip replays the same round).
+  roundStartedAt: number;
   lastFeedback:
     | {
         playerId: string;
@@ -80,7 +83,7 @@ export function joinLobby(
 export function loadPlaylist(
   token: string,
   playlistUrl: string,
-): Promise<{ loaded: number }> {
+): Promise<{ loaded: number; filtered: number }> {
   return postJson("/api/playlist", { token, playlist_url: playlistUrl });
 }
 
@@ -107,6 +110,11 @@ export const startSession = (token: string) =>
 
 export const submitAnswer = (token: string, guess: string) =>
   command("/api/session/answer", token, { guess });
+
+export const skipRound = (
+  token: string,
+  reason: "manual" | "rights" = "manual",
+) => command(`/api/session/skip?reason=${reason}`, token);
 
 export const restartSession = (token: string) =>
   command("/api/session/restart", token);

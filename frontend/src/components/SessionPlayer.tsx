@@ -1,20 +1,66 @@
 import { useEffect, useRef } from "react";
-import { FATAL_YT_ERRORS, loadYouTubeAPI, type YTPlayer } from "../lib/youtubeApi";
+import { skipRound } from "../api";
+import {
+  FATAL_YT_ERRORS,
+  YT_ERROR_DESCRIPTIONS,
+  YT_STATE_NAMES,
+  loadYouTubeAPI,
+  type YTPlayer,
+} from "../lib/youtubeApi";
 
 type Props = {
   videoId: string | null;
+  hostToken: string | null;
 };
+
+// How long we wait, after loading a video, before deciding it's unplayable
+// and asking the backend to move on. Region-restricted / age-restricted /
+// "unavailable" videos often pass the oEmbed pre-check but then never reach
+// the "playing" state in the iframe — that's exactly what this catches.
+const WATCHDOG_MS = 8000;
 
 // YouTube iframe driven entirely by the session's `videoId`. When videoId
 // changes, we load + autoplay it. When it becomes null (round ended), we
-// stop. The iframe is rendered small but visible — YouTube refuses to play
-// in iframes with opacity:0 or display:none. Hide via .yt-offscreen in CSS
-// when going to "real blindtest" mode.
-export function SessionPlayer({ videoId }: Props) {
+// stop. If the video errors or never starts playing within WATCHDOG_MS,
+// the host's client asks the backend to skip to the next round.
+export function SessionPlayer({ videoId, hostToken }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const playerRef = useRef<YTPlayer | null>(null);
   const readyRef = useRef(false);
   const pendingVideoRef = useRef<string | null>(videoId);
+  const watchdogRef = useRef<number | null>(null);
+  const watchedVideoRef = useRef<string | null>(null);
+
+  function clearWatchdog() {
+    if (watchdogRef.current !== null) {
+      window.clearTimeout(watchdogRef.current);
+      watchdogRef.current = null;
+    }
+  }
+
+  function armWatchdog(forVideoId: string) {
+    clearWatchdog();
+    watchedVideoRef.current = forVideoId;
+    watchdogRef.current = window.setTimeout(() => {
+      // Only fire if we're still on the same video; otherwise stale.
+      if (watchedVideoRef.current !== forVideoId) return;
+      console.warn(
+        `[SessionPlayer] watchdog: ${forVideoId} never reached "playing" within ${WATCHDOG_MS}ms — asking backend to skip`,
+      );
+      requestSkip("watchdog timeout");
+    }, WATCHDOG_MS);
+  }
+
+  function requestSkip(reason: string) {
+    if (!hostToken) {
+      console.log(`[SessionPlayer] skip requested (${reason}) — not host, ignored`);
+      return;
+    }
+    console.log(`[SessionPlayer] requesting skip (rights): ${reason}`);
+    skipRound(hostToken, "rights").catch((err) =>
+      console.warn("[SessionPlayer] skip request failed:", err),
+    );
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -39,21 +85,36 @@ export function SessionPlayer({ videoId }: Props) {
             readyRef.current = true;
             console.log("[SessionPlayer] ready");
             const pending = pendingVideoRef.current;
-            if (pending) playerRef.current?.loadVideoById(pending);
+            if (pending) {
+              playerRef.current?.loadVideoById(pending);
+              armWatchdog(pending);
+            }
           },
           onError: (e: { data: number }) => {
-            console.warn("[SessionPlayer] YT error code", e.data);
+            const desc = YT_ERROR_DESCRIPTIONS[e.data] ?? "unknown error";
+            console.warn(
+              `[SessionPlayer] YT error ${e.data}: ${desc} (video=${watchedVideoRef.current ?? "?"})`,
+            );
             if (FATAL_YT_ERRORS.has(e.data)) {
-              // Can't play this round's song — the host will hear nothing,
-              // the round still ticks down on the backend. Future work:
-              // notify backend so it skips to the next song.
+              clearWatchdog();
+              requestSkip(`YT error ${e.data}`);
             }
+          },
+          onStateChange: (e: { data: number }) => {
+            const name = YT_STATE_NAMES[e.data] ?? String(e.data);
+            console.log(
+              `[SessionPlayer] state → ${name} (video=${watchedVideoRef.current ?? "?"})`,
+            );
+            // Cleared once the video is actually playing — proves the embed
+            // is working.
+            if (e.data === 1) clearWatchdog();
           },
         },
       }) as YTPlayer;
     });
     return () => {
       cancelled = true;
+      clearWatchdog();
       try {
         playerRef.current?.destroy?.();
       } catch {
@@ -71,8 +132,10 @@ export function SessionPlayer({ videoId }: Props) {
     if (videoId) {
       console.log("[SessionPlayer] loadVideoById", videoId);
       player.loadVideoById(videoId);
+      armWatchdog(videoId);
     } else {
       console.log("[SessionPlayer] pause (no videoId)");
+      clearWatchdog();
       try {
         player.pauseVideo();
       } catch {
