@@ -2,7 +2,12 @@ import { useEffect, useRef, useState } from "react";
 import type { LobbyState } from "../api";
 
 export function useLobby(token: string | null) {
-  const [state, setState] = useState<LobbyState>({ players: [], host_id: null });
+  const [state, setState] = useState<LobbyState>({
+    players: [],
+    host_id: null,
+    playlist: [],
+    playlist_url: null,
+  });
   const [connected, setConnected] = useState(false);
   const wsRef = useRef<WebSocket | null>(null);
 
@@ -23,7 +28,12 @@ export function useLobby(token: string | null) {
         try {
           const msg = JSON.parse(ev.data);
           if (msg.type === "state") {
-            setState({ players: msg.players, host_id: msg.host_id });
+            setState({
+              players: msg.players,
+              host_id: msg.host_id,
+              playlist: msg.playlist ?? [],
+              playlist_url: msg.playlist_url ?? null,
+            });
           }
         } catch {
           /* ignore */

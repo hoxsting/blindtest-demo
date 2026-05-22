@@ -33,7 +33,11 @@ export default function App() {
     <Lobby
       state={state}
       connected={connected}
-      me={{ playerId: session.playerId, isHost: session.isHost }}
+      me={{
+        playerId: session.playerId,
+        isHost: session.isHost,
+        token: session.token,
+      }}
     />
   );
 }

@@ -8,7 +8,8 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from .lobby import lobby
-from .models import JoinRequest, JoinResponse
+from .models import JoinRequest, JoinResponse, LoadPlaylistRequest, Track
+from .spotify import SpotifyError, fetch_playlist_tracks
 
 HOST_TOKEN = secrets.token_urlsafe(8)
 STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
@@ -87,6 +88,24 @@ async def join(req: JoinRequest) -> JoinResponse:
 @app.get("/api/lobby")
 async def get_lobby() -> JSONResponse:
     return JSONResponse(lobby.state().model_dump())
+
+
+@app.post("/api/playlist")
+async def load_playlist(req: LoadPlaylistRequest) -> JSONResponse:
+    if not lobby.is_host_token(req.token):
+        raise HTTPException(status_code=403, detail="Seul l'hôte peut charger une playlist")
+    try:
+        raw_tracks = fetch_playlist_tracks(req.playlist_url)
+    except SpotifyError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    tracks = [Track(**t) for t in raw_tracks]
+    if not tracks:
+        raise HTTPException(
+            status_code=400,
+            detail="Aucune piste jouable trouvée (preview_url indisponible sur cette playlist)",
+        )
+    await lobby.set_playlist(req.playlist_url, tracks)
+    return JSONResponse({"loaded": len(tracks)})
 
 
 @app.websocket("/ws")
