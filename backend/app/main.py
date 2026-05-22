@@ -1,5 +1,6 @@
 import secrets
 import socket
+import subprocess
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
@@ -15,27 +16,51 @@ STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
 app = FastAPI(title="Blind Test")
 
 
-def _local_ip() -> str:
-    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+def _all_local_ips() -> list[tuple[str, str]]:
+    """Return [(interface, ip), ...] for non-loopback IPv4 interfaces."""
+    results: list[tuple[str, str]] = []
     try:
-        sock.connect(("8.8.8.8", 80))
-        return sock.getsockname()[0]
-    except OSError:
-        return "127.0.0.1"
-    finally:
-        sock.close()
+        out = subprocess.check_output(["ip", "-4", "-o", "addr"], text=True)
+        for line in out.splitlines():
+            parts = line.split()
+            if len(parts) >= 4 and parts[2] == "inet":
+                iface = parts[1]
+                ip = parts[3].split("/")[0]
+                if ip != "127.0.0.1":
+                    results.append((iface, ip))
+    except (FileNotFoundError, subprocess.CalledProcessError):
+        try:
+            hostname = socket.gethostname()
+            ip = socket.gethostbyname(hostname)
+            if ip != "127.0.0.1":
+                results.append(("?", ip))
+        except OSError:
+            pass
+    return results
 
 
 @app.on_event("startup")
 async def _print_urls() -> None:
-    ip = _local_ip()
+    ips = _all_local_ips()
     port = 8000
     print()
-    print("=" * 60)
+    print("=" * 70)
     print("🎵  Blind Test server running")
-    print(f"   Host link (pour toi)     : http://{ip}:{port}/?host={HOST_TOKEN}")
-    print(f"   Player link (à partager) : http://{ip}:{port}/")
-    print("=" * 60)
+    print()
+    if not ips:
+        print("   ⚠️  Aucune IP locale détectée — utilise http://127.0.0.1:8000/")
+    else:
+        print("   Interfaces réseau détectées :")
+        for iface, ip in ips:
+            print(f"     • {iface:<10} → http://{ip}:{port}/")
+        print()
+        primary = ips[0][1]
+        print(f"   Host link (pour toi)     : http://{primary}:{port}/?host={HOST_TOKEN}")
+        print(f"   Player link (à partager) : http://{primary}:{port}/")
+        print()
+        print("   👉 Si l'invité ne voit pas le salon, essaie une AUTRE IP de la liste")
+        print("      ci-dessus (en général celle de ton Wi-Fi, type 192.168.x.x).")
+    print("=" * 70)
     print()
 
 
