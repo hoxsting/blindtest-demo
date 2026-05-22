@@ -3,14 +3,16 @@ Projet :
 
 Input :
 - URL Playslist Spotify
-- Salon pour rejoindre la partie en cours. Entrée nom d'utilisateur
-- Bouton démarre la partie
+- Salon pour rejoindre la session. Entrée nom d'utilisateur
+- Affichage des utilisateurs connectés à la session avant lancement de la partie.
+- Bouton "démarrer la partie"
 
 Pré-traitement :
 - Split la musique en "auteur(s)" / "titre"
 
 Traitement :
 -L'application lance une session de blindtest.
+-Les joueurs participent depuis une url dédiée aux joueurs.
 -Une session de blindtest joue 10 chansons prises aléatoirement dans la playlist spotify, 30 secondes par chanson. 
 - Toutes les "configured secondes" / 3 on a des indices (année / première lettre de l'artiste / première lettres du titre)
 - Quand un utilisateur rentre une réponse fausse on affiche une croix à côté de son nom et une animation "shake" de sa "carte"
