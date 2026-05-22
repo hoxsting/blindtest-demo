@@ -115,27 +115,35 @@ export function useLobby(token: string | null) {
 
     function open() {
       const proto = window.location.protocol === "https:" ? "wss" : "ws";
-      const ws = new WebSocket(
-        `${proto}://${window.location.host}/ws?token=${encodeURIComponent(token!)}`,
-      );
+      const url = `${proto}://${window.location.host}/ws?token=${encodeURIComponent(token!)}`;
+      console.log("[useLobby] opening WS", url);
+      const ws = new WebSocket(url);
       wsRef.current = ws;
-      ws.onopen = () => setConnected(true);
+      ws.onopen = () => {
+        console.log("[useLobby] WS open");
+        setConnected(true);
+      };
       ws.onmessage = (ev) => {
         try {
           applyMessage(JSON.parse(ev.data));
-        } catch {
-          /* ignore */
+        } catch (err) {
+          console.warn("[useLobby] bad message", err);
         }
       };
-      ws.onclose = () => {
+      ws.onclose = (ev) => {
+        console.warn("[useLobby] WS closed", ev.code, ev.reason);
         setConnected(false);
         if (!cancelled) {
           retry = window.setTimeout(open, 1500);
         }
       };
-      ws.onerror = () => ws.close();
+      ws.onerror = (ev) => {
+        console.warn("[useLobby] WS error", ev);
+        ws.close();
+      };
     }
 
+    console.log("[useLobby] effect, token=", token);
     open();
 
     return () => {
