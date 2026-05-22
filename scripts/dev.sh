@@ -6,11 +6,12 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 cd "$ROOT/backend"
 if [ ! -d ".venv" ]; then
-  echo "🐍 Creating venv and installing requirements…"
+  echo "🐍 Creating venv…"
   python3 -m venv .venv
   ./.venv/bin/pip install --upgrade pip
-  ./.venv/bin/pip install -r requirements.txt
 fi
+echo "🐍 Syncing Python dependencies…"
+./.venv/bin/pip install -r requirements.txt --quiet
 
 cleanup() {
   echo "🛑 Stopping…"

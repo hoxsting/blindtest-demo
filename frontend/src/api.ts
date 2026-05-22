@@ -8,9 +8,8 @@ export type Track = {
   id: string;
   name: string;
   artists: string;
-  album: string;
   year: string;
-  preview_url: string;
+  video_id: string;
   duration_ms: number;
 };
 

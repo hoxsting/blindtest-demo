@@ -253,3 +253,13 @@ button.primary {
   font-size: 0.875rem;
   margin: 0.5rem 0 0;
 }
+
+.yt-hidden {
+  position: absolute;
+  top: -9999px;
+  left: -9999px;
+  width: 200px;
+  height: 200px;
+  pointer-events: none;
+  opacity: 0;
+}

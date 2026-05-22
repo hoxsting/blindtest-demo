@@ -22,9 +22,8 @@ class Track(BaseModel):
     id: str
     name: str
     artists: str
-    album: str
     year: str
-    preview_url: str
+    video_id: str
     duration_ms: int
 
 

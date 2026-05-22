@@ -30,12 +30,12 @@ export function PlaylistLoader({ token, currentUrl }: Props) {
 
   return (
     <form className="card playlist-loader" onSubmit={submit}>
-      <label htmlFor="playlist-url">URL de playlist Spotify</label>
+      <label htmlFor="playlist-url">URL de playlist YouTube</label>
       <input
         id="playlist-url"
         type="url"
         value={url}
-        placeholder="https://open.spotify.com/playlist/…"
+        placeholder="https://www.youtube.com/playlist?list=…"
         onChange={(e) => setUrl(e.target.value)}
         disabled={loading}
       />
